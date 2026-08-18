@@ -11,6 +11,8 @@ It is a lint, not a proof. It reports capability, not intent.
 
 ## Install
 
+With pip, so `omaudit` is on your PATH:
+
 ```sh
 git clone <this-repo>
 cd omaudit
@@ -19,9 +21,23 @@ pip install -e .
 
 (`pipx install omaudit` once it's published to PyPI — not yet.)
 
+Without pip — clone the repo and run the package directly. Python 3.11+,
+no dependencies:
+
+```sh
+git clone <this-repo>
+cd omaudit
+python3 -m omaudit              # command list
+python3 -m omaudit scan ./path/to/plugin
+python3 -m omaudit help add
+```
+
 `scan`/`verify`/`baseline`/`badge`/`permissions`/`schema` need no Omarchy —
 they run in CI on a bare Linux box. `add` and `check` do need the `omarchy`
 CLI on PATH, since they hand off to `omarchy plugin add`/`remove`.
+
+The `tests/` directory is for development only. You do not need it to run
+the tool.
 
 ## Use
 
