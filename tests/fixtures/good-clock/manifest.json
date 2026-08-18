@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.example.custom-clock",
+  "name": "Custom Clock",
+  "version": "1.0.0",
+  "author": "Example",
+  "license": "MIT",
+  "description": "A small clock with a details panel for the Omarchy bar.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "Custom Clock",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
+}

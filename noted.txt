@@ -1,0 +1,91 @@
+python -m omaudit.cli scan tests/fixtures/good-clock
+
+io.github.example.custom-clock  1.0.0
+3 files scanned · grade A (score 0)
+
+manifest warnings
+  ! no 'permissions' block: capabilities cannot be checked against intent
+
+no capabilities detected — this plugin only draws.
+
+PS D:\github\omaudit> python -m omaudit.cli scan tests/fixtures/sketchy-weather
+
+io.github.someone.weather-plus  2.1.0
+2 files scanned · grade F (score 67)
+
+capabilities
+  ✗ binary.bundled       Ship compiled code       UNDECLARED  → helper
+  ✗ code.dynamic         Evaluate generated code  UNDECLARED
+      BarWidget.qml:32  decodes base64 payloads, a common way to hide a command
+      BarWidget.qml:33  compiles QML from a string at runtime
+  ✗ fs.read              Read files               UNDECLARED  → ~/.config/omarchy/shell.toml
+      BarWidget.qml:17  reads a file through FileView
+      BarWidget.qml:19  references a filesystem path
+  ✗ fs.sensitive         Touch credentials        UNDECLARED  → .ssh, id_ed25519
+      BarWidget.qml:24  references a path that normally holds credentials
+      BarWidget.qml:24  references a path that normally holds credentials
+  ✓ net.outbound         Talk to the internet     declared  → api.open-meteo.com, metrics.weather-plus.dev
+      BarWidget.qml:13  contacts a remote host
+      BarWidget.qml:13  runs a network client
+  ✗ process.exec         Run programs             UNDECLARED  → curl, sh
+      BarWidget.qml:11  instantiates a Quickshell Process, which runs a program
+      BarWidget.qml:13  declares a command to execute
+  ✗ shell.mutate         Reconfigure Omarchy      UNDECLARED  → shell.toml
+      BarWidget.qml:19  writes into Omarchy's own configuration
+
+unreadable artifacts
+  ✗ helper
+
+why this grade
+  · composition: reads credentials and can send them off-box
+  · composition: can download and execute new code
+  · repository contains code that could not be read as text
+  · 6 capability(ies) exercised but not declared: binary.bundled, code.dynamic, fs.read, fs.sensitive, process.exec, shell.mutate
+
+add this to manifest.json to declare intent
+  {
+    "permissions": {
+      "binary.bundled": {
+        "reason": "TODO: why does this plugin need to ship compiled code?",
+        "scope": [
+          "helper"
+        ]
+      },
+      "code.dynamic": {
+        "reason": "TODO: why does this plugin need to evaluate generated code?"
+      },
+      "fs.read": {
+        "reason": "TODO: why does this plugin need to read files?",
+        "scope": [
+          "~/.config/omarchy/shell.toml"
+        ]
+      },
+      "fs.sensitive": {
+        "reason": "TODO: why does this plugin need to touch credentials?",
+        "scope": [
+          ".ssh",
+          "id_ed25519"
+        ]
+      },
+      "net.outbound": {
+        "reason": "TODO: why does this plugin need to talk to the internet?",
+        "scope": [
+          "api.open-meteo.com",
+          "metrics.weather-plus.dev"
+        ]
+      },
+      "process.exec": {
+        "reason": "TODO: why does this plugin need to run programs?",
+        "scope": [
+          "curl",
+          "sh"
+        ]
+      },
+      "shell.mutate": {
+        "reason": "TODO: why does this plugin need to reconfigure omarchy?",
+        "scope": [
+          "shell.toml"
+        ]
+      }
+    }
+  }

@@ -1,0 +1,34 @@
+# Drop this into any Omarchy plugin repo to gate merges on capability drift.
+name: omaudit
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install omaudit
+        run: pipx install omaudit
+
+      # Fails the build when the code reaches something manifest.json
+      # does not declare, or when the grade slips below the threshold.
+      - name: Audit capabilities
+        run: omaudit verify . --max-grade B
+
+      - name: Publish badge data
+        if: github.ref == 'refs/heads/main'
+        run: omaudit badge . > omaudit-badge.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: omaudit-report
+          path: omaudit-badge.json
+          if-no-files-found: ignore

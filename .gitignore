@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+
+# census output — regenerate with fetch_registry.py + census.py
+census/
+*.tar.gz
+
+# oh-my-claudecode runtime state — not project content
+.omc/

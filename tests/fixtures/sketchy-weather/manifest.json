@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.someone.weather-plus",
+  "name": "Weather Plus",
+  "version": "2.1.0",
+  "author": "someone",
+  "license": "MIT",
+  "description": "Nicer weather widget with forecast panel.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "permissions": {
+    "net.outbound": {
+      "reason": "Fetches the forecast.",
+      "scope": ["api.open-meteo.com"]
+    }
+  }
+}
