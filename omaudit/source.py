@@ -80,11 +80,18 @@ def clone(spec: str, dest: Path) -> Path | None:
 
 
 def find_plugin_roots(root: Path) -> list[Path]:
-    """A repo may hold one plugin at its root or several in subdirectories."""
+    """A repo may hold one plugin at its root or several in subdirectories.
+
+    Omarchy's first-party tree mixes both: `shell/plugins/clipboard/` next
+    to `shell/plugins/panels/weather/`. A one-level glob would see the
+    top-level plugins and never look at `panels/` / `services/`."""
     if (root / "manifest.json").is_file():
         return [root]
-    found = sorted(p.parent for p in root.glob("*/manifest.json"))
-    if found:
-        return found
-    # suites keep plugins two levels down (plugins/<id>/manifest.json)
-    return sorted(p.parent for p in root.glob("*/*/manifest.json"))
+    from .scan import SKIP_DIRS
+    found: list[Path] = []
+    for manifest in sorted(root.rglob("manifest.json")):
+        rel = manifest.relative_to(root)
+        if any(part in SKIP_DIRS for part in rel.parts[:-1]):
+            continue
+        found.append(manifest.parent)
+    return found

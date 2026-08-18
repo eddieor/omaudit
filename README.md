@@ -25,6 +25,11 @@ CLI on PATH, since they hand off to `omarchy plugin add`/`remove`.
 
 ## Use
 
+```sh
+omaudit              # command list
+omaudit help add     # flags and a worked example
+```
+
 **The install-time gate:**
 
 ```sh
@@ -111,14 +116,20 @@ A ready-to-copy GitHub Action lives in `.github/workflows/omaudit.yml`.
 
 | Command | Does |
 |---|---|
+| `omaudit help [command]` | Command list, or how to use one command |
 | `omaudit add <source>` | Review a plugin's capabilities, then install it via `omarchy plugin add` |
 | `omaudit check` | Re-audit installed plugins against their approved baseline |
+| `omaudit check --builtin` | Same, for first-party plugins shipped with Omarchy |
+| `omaudit check --all` | User-installed and first-party together |
+| `omaudit report` | Report card of every tracked plugin (saved under `~/.config/omaudit/`) |
+| `omaudit census` | Snapshot the live omarchyplugins.com listing (not on a timer) |
 | `omaudit scan <dir>` | Human report; `--json` for the full document |
 | `omaudit verify <dir>` | CI gate; fails on undeclared capabilities or grade drop |
 | `omaudit permissions <dir>` | Generate a `permissions` block from the code |
 | `omaudit badge <dir>` | shields.io endpoint JSON |
 | `omaudit schema` | The capability vocabulary, machine-readable |
 | `omaudit baseline <dir>` | Snapshot current capabilities as accepted |
+| `omaudit baseline --builtin` | Snapshot every first-party plugin (stored in `~/.config/omaudit/baselines/`) |
 
 Exit codes: `0` clean · `1` findings · `2` invalid manifest · `3` usage.
 
@@ -139,9 +150,11 @@ capability *existence*, which is the thing that actually matters on update.
 ## Auditing the whole ecosystem
 
 ```sh
-python3 fetch_registry.py --out census/     # pull the marketplace registry
-python3 census.py census/plugins.txt --out census/
+omaudit census --fetch-only    # refresh the live listing, say what is new
+omaudit census                 # then clone + audit; clones stay cached
 ```
+
+(`python3 fetch_registry.py` / `python3 census.py` still work; they call the same code.)
 
 `fetch_registry.py` reads the community marketplace registry and writes a source
 list pinned to each entry's `listingValidatedCommit` — the exact commit the

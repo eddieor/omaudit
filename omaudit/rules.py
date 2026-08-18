@@ -25,12 +25,17 @@ def _g(n: int) -> Callable[[re.Match], Optional[str]]:
     def inner(m: re.Match) -> Optional[str]:
         try:
             return m.group(n)
-        except (IndexError, error_types):
+        except IndexError:
             return None
     return inner
 
 
-error_types = re.error
+def _first_quoted_cmd(m: re.Match) -> Optional[str]:
+    """First quoted token after the match. `execDetached` is often written
+    as a ternary (`execDetached(cond ? ["cmd"] : ["other"])`), so the
+    binary isn't the first identifier after `(`."""
+    found = re.search(r"""["']([\w./-]+)""", m.string[m.end():])
+    return found.group(1) if found else None
 
 # Paths that mean "credentials" on an Omarchy box.
 SENSITIVE_PATHS = [
@@ -38,7 +43,9 @@ SENSITIVE_PATHS = [
     r"\.docker/config", r"\.git-credentials",
     # dotenv *files* only — not "\.env\b", which also matches ordinary
     # property/method access like `Quickshell.env("HOME")` or `process.env`.
-    r"(?:^|[\"'/\s])\.env(?:\.[A-Za-z0-9_-]+)?(?=[\"'\s]|$)",
+    # Lookbehind keeps the prefix out of the match so extracted scope is
+    # `.env` / `.env.local`, not `/.env` or ` .env`.
+    r"(?:^|(?<=[\"'/\s]))\.env(?:\.[A-Za-z0-9_-]+)?(?=[\"'\s]|$)",
     r"\.config/1Password", r"\.password-store", r"\.local/share/keyrings",
     r"\.mozilla", r"\.config/(?:google-)?chrom(?:e|ium)", r"\.config/BraveSoftware",
     r"\.claude(?:\.json)?", r"\.codex", r"\.config/gh/hosts",
@@ -56,9 +63,12 @@ RULES: list[Rule] = [
     Rule("exec.command-prop", "process.exec",
          re.compile(r"\bcommand\s*:\s*\[\s*[\"']([^\"']+)[\"']"),
          "declares a command to execute", extract=_g(1)),
+    Rule("exec.command-assign", "process.exec",
+         re.compile(r"\bcommand\s*=\s*\[\s*[\"']([^\"']+)[\"']"),
+         "assigns a command to execute", extract=_g(1)),
     Rule("exec.detached", "process.exec",
-         re.compile(r"\bQuickshell\.execDetached\s*\(\s*\[?\s*[\"']?([\w./-]+)?"),
-         "launches a detached process", extract=_g(1)),
+         re.compile(r"\bQuickshell\.execDetached\s*\("),
+         "launches a detached process", extract=_first_quoted_cmd),
     Rule("exec.startdetached", "process.exec",
          re.compile(r"\bstartDetached\s*\("),
          "launches a detached process"),

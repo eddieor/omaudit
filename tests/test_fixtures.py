@@ -13,6 +13,13 @@ def test_benign_plugin_is_clean():
     assert doc["capabilities"] == {}
 
 
+def test_scan_report_glosses_the_grade():
+    from omaudit.report import human
+    text = human(_audit(FIXTURES / "good-clock"))
+    assert "grade " in text
+    assert "only draws" in text
+
+
 def test_sketchy_plugin_is_caught():
     doc = _audit(FIXTURES / "sketchy-weather")
     assert doc["verdict"]["grade"] == "F"

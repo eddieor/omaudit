@@ -114,7 +114,7 @@ def test_remove_action_shells_out_and_resolves(tmp_path, monkeypatch, capsys):
 
     code = _run_check(["--dir", str(tmp_path)])
     assert code == EXIT_OK
-    assert calls == [["omarchy", "plugin", "remove", "test.drifted"]]
+    assert calls == [["omarchy", "plugin", "remove", "test.drifted", "--yes"]]
     assert "removed test.drifted" in capsys.readouterr().out
 
 
@@ -178,6 +178,122 @@ def test_json_never_prompts(tmp_path, monkeypatch, capsys):
     assert code == EXIT_FINDINGS
     results = json.loads(capsys.readouterr().out)
     assert results[0]["status"] == "changed"
+
+
+def test_nested_plugin_tree_is_discovered(tmp_path, capsys):
+    """First-party layout: top-level plugins next to panels/<id>/."""
+    _make_plugin(tmp_path / "clipboard", "omarchy.clipboard", "Item { }")
+    _make_plugin(tmp_path / "panels" / "weather", "omarchy.weather", "Item { }")
+    code = _run_check(["--dir", str(tmp_path), "--json"])
+    assert code == EXIT_OK
+    results = json.loads(capsys.readouterr().out)
+    assert {r["id"] for r in results} == {"omarchy.clipboard", "omarchy.weather"}
+    assert all(r["firstParty"] for r in results)
+
+
+def test_unwritable_plugin_uses_baseline_store(tmp_path, monkeypatch, capsys):
+    from omaudit import paths as paths_mod
+
+    plugin = _make_plugin(tmp_path / "sys" / "tailscale", "omarchy.tailscale",
+                          'Process { command: ["tailscale"] }\n')
+    store = tmp_path / "xdg" / "omaudit" / "baselines"
+    monkeypatch.setattr(paths_mod, "baseline_store_dir", lambda: store)
+    monkeypatch.setattr(paths_mod, "sidecar_writable", lambda _p: False)
+    monkeypatch.setattr(paths_mod, "is_builtin", lambda _p: True)
+    monkeypatch.setattr(paths_mod, "omarchy_version", lambda: "4.0.0.test")
+
+    args = build_parser().parse_args(["baseline", str(plugin)])
+    assert args.func(args) == EXIT_OK
+    capsys.readouterr()
+    dest = store / "omarchy.tailscale.json"
+    assert dest.is_file()
+    snap = json.loads(dest.read_text(encoding="utf-8"))
+    assert snap["acceptedCapabilities"] == ["process.exec"]
+    assert snap["source"] == "builtin"
+    assert snap["omarchyVersion"] == "4.0.0.test"
+    assert not (plugin / ".omaudit-baseline.json").exists()
+
+    code = _run_check(["--dir", str(tmp_path / "sys"), "--json"])
+    assert code == EXIT_OK
+    results = json.loads(capsys.readouterr().out)
+    assert results[0]["id"] == "omarchy.tailscale"
+    assert results[0]["status"] == "unchanged"
+
+
+def test_baseline_builtin_snapshots_the_tree(tmp_path, monkeypatch, capsys):
+    from omaudit import paths as paths_mod
+
+    tree = tmp_path / "omarchy" / "shell" / "plugins"
+    _make_plugin(tree / "clock", "omarchy.clock", "Item { }")
+    _make_plugin(tree / "panels" / "weather", "omarchy.weather",
+                 'Process { command: ["sensors"] }\n')
+    store = tmp_path / "store"
+    monkeypatch.setattr(paths_mod, "builtin_plugins_dir", lambda: tree)
+    monkeypatch.setattr(paths_mod, "baseline_store_dir", lambda: store)
+    monkeypatch.setattr(paths_mod, "sidecar_writable", lambda _p: False)
+    monkeypatch.setattr(paths_mod, "is_builtin", lambda _p: True)
+    monkeypatch.setattr(paths_mod, "omarchy_version", lambda: "4.0.0.test")
+
+    args = build_parser().parse_args(["baseline", "--builtin"])
+    assert args.func(args) == EXIT_OK
+    assert (store / "omarchy.clock.json").is_file()
+    weather = json.loads((store / "omarchy.weather.json").read_text(encoding="utf-8"))
+    assert weather["acceptedCapabilities"] == ["process.exec"]
+    assert weather["source"] == "builtin"
+    assert "baselined 2 plugin(s)" in capsys.readouterr().out
+
+
+def test_check_builtin_flag_uses_omarchy_tree(tmp_path, monkeypatch, capsys):
+    from omaudit import paths as paths_mod
+
+    tree = tmp_path / "omarchy" / "shell" / "plugins"
+    _make_plugin(tree / "clock", "omarchy.clock", "Item { }")
+    _make_plugin(tree / "panels" / "weather", "omarchy.weather", "Item { }")
+    monkeypatch.setattr(paths_mod, "builtin_plugins_dir", lambda: tree)
+    monkeypatch.setattr(paths_mod, "user_plugins_dir",
+                        lambda: tmp_path / "nowhere-user")
+
+    code = _run_check(["--builtin", "--json"])
+    assert code == EXIT_OK
+    results = json.loads(capsys.readouterr().out)
+    assert {r["id"] for r in results} == {"omarchy.clock", "omarchy.weather"}
+
+
+def test_check_all_combines_user_and_builtin(tmp_path, monkeypatch, capsys):
+    from omaudit import paths as paths_mod
+
+    user = tmp_path / "user"
+    builtin = tmp_path / "builtin"
+    _make_plugin(user / "eddieor.active-app", "eddieor.active-app", "Item { }")
+    _make_plugin(builtin / "clock", "omarchy.clock", "Item { }")
+    monkeypatch.setattr(paths_mod, "user_plugins_dir", lambda: user)
+    monkeypatch.setattr(paths_mod, "builtin_plugins_dir", lambda: builtin)
+
+    code = _run_check(["--all", "--json"])
+    assert code == EXIT_OK
+    results = json.loads(capsys.readouterr().out)
+    assert {r["id"] for r in results} == {"eddieor.active-app", "omarchy.clock"}
+
+
+def test_cannot_pin_or_remove_first_party(tmp_path, monkeypatch, capsys):
+    from omaudit import paths as paths_mod
+
+    d = _make_plugin(tmp_path / "tailscale", "omarchy.tailscale",
+                     'Quickshell.clipboardText = "x"\n')
+    _write_baseline(d, "omarchy.tailscale", [])
+    monkeypatch.setattr(paths_mod, "is_builtin", lambda _p: True)
+
+    def fail_if_run(*a, **k):
+        raise AssertionError("must not shell out for first-party pin/remove")
+    monkeypatch.setattr(cli.subprocess, "run", fail_if_run)
+
+    monkeypatch.setattr("builtins.input", lambda prompt: "p")
+    assert _run_check(["--dir", str(tmp_path)]) == EXIT_FINDINGS
+    assert "can't pin: first-party" in capsys.readouterr().out
+
+    monkeypatch.setattr("builtins.input", lambda prompt: "r")
+    assert _run_check(["--dir", str(tmp_path)]) == EXIT_FINDINGS
+    assert "can't remove: first-party" in capsys.readouterr().out
 
 
 class _Ok:

@@ -13,3 +13,8 @@ census/
 
 # oh-my-claudecode runtime state — not project content
 .omc/
+
+# project notes stay local; README.md is the public front door
+*.md
+!README.md
+

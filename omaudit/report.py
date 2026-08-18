@@ -5,7 +5,10 @@ import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-from .capabilities import CAPABILITIES, EXFIL_PAIRS, FLAGGED_CAPABILITY_IDS, grade
+from .capabilities import (
+    CAPABILITIES, EXFIL_PAIRS, FLAGGED_CAPABILITY_IDS, GRADE_GLOSS,
+    GRADE_RANGE, grade, grade_gloss,
+)
 from .manifest import Manifest, suggest_permissions
 from .scan import ScanResult
 
@@ -100,7 +103,10 @@ def install_summary(doc: dict) -> str:
     name = p.get("name") or p["id"]
     version = p.get("version") or ""
     out.append("")
-    out.append(f"  {name} {version} - grade {doc['verdict']['grade']}".rstrip())
+    letter = doc["verdict"]["grade"]
+    gloss = grade_gloss(letter)
+    label = f"grade {letter} - {gloss}" if gloss else f"grade {letter}"
+    out.append(f"  {name} {version} - {label}".rstrip())
     out.append("")
 
     caps = doc["capabilities"]
@@ -178,12 +184,145 @@ def check_summary(results: list[dict]) -> str:
             out.append("")
 
     not_tracked = [r for r in results if r["status"] == "not-tracked"]
-    if not_tracked:
-        out.append(f"{len(not_tracked)} plugin(s) have never been baselined: "
-                   + ", ".join(r["id"] for r in not_tracked))
+    first_party = [r for r in not_tracked if r.get("firstParty")]
+    third_party = [r for r in not_tracked if not r.get("firstParty")]
+    if third_party:
+        out.append(f"{len(third_party)} plugin(s) have never been baselined: "
+                   + ", ".join(r["id"] for r in third_party))
         out.append("  run `omaudit baseline <dir>` to start tracking them")
         out.append("")
+    if first_party:
+        out.append(f"{len(first_party)} first-party plugin(s) have never been baselined: "
+                   + ", ".join(r["id"] for r in first_party))
+        out.append("  run `omaudit baseline --builtin` to start tracking them")
+        out.append("")
 
+    return "\n".join(out)
+
+
+GRADE_ORDER = ["A", "B", "C", "D", "F"]
+
+# Extra half-line on the report-card key only — the letter + gloss already
+# carry the rating; this is "why a shell plugin is allowed to be a C".
+GRADE_HINT = {
+    "A": "",
+    "B": "a Process, a FileView",
+    "C": "several reach-outs; normal for a shell",
+    "D": "privilege, credentials, or a lot of both",
+    "F": "",
+}
+
+
+def grade_legend() -> str:
+    """The key that belongs on the report card. Not on `add` — that
+    screen has ten seconds and the English capability lines already
+    do the work."""
+    lines = ["Grades"]
+    for letter in GRADE_ORDER:
+        hint = GRADE_HINT[letter]
+        pad = " " * max(1, 24 - len(GRADE_GLOSS[letter]))
+        extra = f"    {hint}" if hint else ""
+        lines.append(f"  {letter}  {GRADE_GLOSS[letter]}{pad}"
+                     f"{GRADE_RANGE[letter]:<6}{extra}".rstrip())
+    lines.extend([
+        "",
+        "Score is how much the plugin can reach, not a count of files.",
+        "First-party B/C is expected: the bar is supposed to exec helpers.",
+        "Composition = a private source plus a network path off-box.",
+        "See: omaudit help grades",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def report_card_json(results: list[dict], scanned_at: str,
+                     omarchy_version: str | None) -> dict:
+    grades = {g: 0 for g in GRADE_ORDER}
+    for r in results:
+        g = r.get("grade")
+        if g in grades:
+            grades[g] += 1
+    return {
+        "omauditSchemaVersion": SCHEMA_VERSION,
+        "kind": "report-card",
+        "scannedAt": scanned_at,
+        "omarchyVersion": omarchy_version,
+        "grades": grades,
+        "unchanged": sum(1 for r in results if r["status"] == "unchanged"),
+        "changed": sum(1 for r in results if r["status"] == "changed"),
+        "notTracked": sum(1 for r in results if r["status"] == "not-tracked"),
+        "compositionRisks": sum(1 for r in results if r.get("composition")),
+        "plugins": results,
+    }
+
+
+def report_card(results: list[dict], scanned_at: str,
+                omarchy_version: str | None) -> str:
+    """A dated sheet of every plugin we already know about: grade,
+    capabilities, and whether anything drifted since the baseline."""
+    doc = report_card_json(results, scanned_at, omarchy_version)
+    out: list[str] = []
+    out.append("omaudit report card")
+    head = scanned_at
+    if omarchy_version:
+        head += f"  Omarchy {omarchy_version}"
+    out.append(head)
+    out.append("")
+
+    n = len(results)
+    grade_bits = "  ".join(f"{g} {doc['grades'][g]}" for g in GRADE_ORDER)
+    out.append(f"{n} plugin(s)   {grade_bits}")
+    out.append(f"{doc['unchanged']} unchanged   {doc['changed']} changed   "
+               f"{doc['notTracked']} not tracked")
+    out.append(f"{doc['compositionRisks']} composition risk(s)")
+    out.append("")
+
+    if not results:
+        out.append("no plugins found")
+        out.append("")
+        return "\n".join(out)
+
+    user = [r for r in results if not r.get("firstParty")]
+    builtin = [r for r in results if r.get("firstParty")]
+    worst_first = lambda r: (-GRADE_ORDER.index(r["grade"]), r["id"])
+
+    def _section(title: str, rows: list[dict]) -> None:
+        if not rows:
+            return
+        out.append(title)
+        for r in sorted(rows, key=worst_first):
+            name = r["id"]
+            version = r.get("version") or ""
+            caps = ", ".join(r.get("observed") or []) or "-"
+            mark = {"changed": "!", "not-tracked": "?"}.get(r["status"], " ")
+            out.append(f"{mark}{r['grade']} {r.get('score', 0):>3}  "
+                       f"{name:<32} {version:<8} {caps}")
+        out.append("")
+
+    _section("User", user)
+    _section("First-party", builtin)
+
+    changed = [r for r in results if r["status"] == "changed"]
+    out.append("Drift")
+    if not changed:
+        out.append("  none")
+    else:
+        for r in changed:
+            added = ", ".join(r.get("added") or [])
+            out.append(f"  {r['id']}: + {added}")
+    out.append("")
+
+    risks = [r for r in results if r.get("composition")]
+    out.append("Composition")
+    if not risks:
+        out.append("  none")
+    else:
+        for r in risks:
+            for why in r["composition"]:
+                out.append(f"  {r['id']}: {why.removeprefix('composition: ')}")
+    out.append("")
+    out.append(grade_legend().rstrip())
+    out.append("")
     return "\n".join(out)
 
 
@@ -194,9 +333,11 @@ def human(doc: dict) -> str:
     head = f"{p['id']}  {p.get('version') or ''}".strip()
     out.append("")
     out.append(_c("1", head))
+    gloss = grade_gloss(g)
+    gloss_txt = f" {gloss}" if gloss else ""
     out.append(f"{doc['filesScanned']} files scanned - grade "
                + _c("1;32" if g in "AB" else "1;33" if g == "C" else "1;31", g)
-               + f" (score {doc['verdict']['score']})")
+               + f"{gloss_txt} (score {doc['verdict']['score']})")
     out.append("")
 
     m = doc["manifest"]

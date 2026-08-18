@@ -70,3 +70,6 @@ def test_composition_risk_credentials_to_network():
     assert {ev["line"] for ev in evidence} == {137, 375, 382, 675}
     line_375 = next(ev for ev in evidence if ev["line"] == 375)
     assert line_375["snippet"].endswith('.env"')
+    # extracted scope is the dotenv filename, not the `/` or space that
+    # preceded it in the source
+    assert set(doc["capabilities"]["fs.sensitive"]["observedScope"]) == {".env"}

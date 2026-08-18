@@ -95,26 +95,32 @@ def test_yes_installs_and_writes_baseline(tmp_path, monkeypatch, capsys):
             shutil.copy(f, install_dir / f.name)
 
     real_run = cli.subprocess.run
+    calls = []
 
     def fake_run(cmd, *a, **k):
         if cmd[:1] == ["omarchy"]:
+            calls.append(cmd)
             return None
         return real_run(cmd, *a, **k)
 
     monkeypatch.setattr(cli.Path, "home", staticmethod(lambda: fake_home))
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
-    code = _run_add([str(FIXTURES / "real-fan-monitor"), "--local", "--yes"])
+    source = str(FIXTURES / "real-fan-monitor")
+    code = _run_add([source, "--local", "--yes"])
     assert code == EXIT_OK
     out = capsys.readouterr().out
     assert "installed io.github.elynch303.fan-monitor" in out
     assert (install_dir / ".omaudit-baseline.json").is_file()
+    # omarchy-plugin-add refuses without --yes when stdin isn't a tty
+    assert calls == [["omarchy", "plugin", "add", source, "--yes"]]
 
 
 def test_install_summary_splits_plain_and_flagged_lines():
     from omaudit.cli import _audit
     doc = _audit(FIXTURES / "real-omarqui")
     text = install_summary(doc)
+    assert "grade D - know what you're doing" in text
     assert "reads files" in text
     assert "talks to internet" in text
     assert "! reads credentials and can send them off-box" in text

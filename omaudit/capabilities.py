@@ -137,6 +137,27 @@ FLAGGED_CAPABILITY_IDS: set[str] = {legs[0] for legs, _why in EXFIL_PAIRS}
 
 GRADES = ["A", "B", "C", "D", "F"]
 
+# One line, on every surface that prints a letter. The score bands are
+# what `grade()` actually uses; keep this table next to that function.
+GRADE_GLOSS = {
+    "A": "only draws",
+    "B": "ordinary",
+    "C": "review it",
+    "D": "know what you're doing",
+    "F": "don't",
+}
+GRADE_RANGE = {
+    "A": "0",
+    "B": "1-6",
+    "C": "7-14",
+    "D": "15-24",
+    "F": "25+",
+}
+
+
+def grade_gloss(letter: str) -> str:
+    return GRADE_GLOSS.get(letter, "")
+
 
 @dataclass
 class Verdict:
