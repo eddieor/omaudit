@@ -2,7 +2,7 @@
 
 Capability audit for [Omarchy Quattro](https://omarchy.org) shell plugins.
 
-<video src="https://github.com/eddieor/omaudit/raw/master/videos/omauditVideo.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/3088301d-316a-40ef-9623-d7cf44ba4948
 
 Omarchy plugins run **unsandboxed inside the long-running shell process**, with
 your full user permissions, installed from arbitrary git URLs. `omaudit` tells
