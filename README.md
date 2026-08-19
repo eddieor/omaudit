@@ -2,6 +2,8 @@
 
 Capability audit for [Omarchy Quattro](https://omarchy.org) shell plugins.
 
+<video src="https://github.com/eddieor/omaudit/raw/master/videos/omauditVideo.mp4" controls width="100%"></video>
+
 Omarchy plugins run **unsandboxed inside the long-running shell process**, with
 your full user permissions, installed from arbitrary git URLs. `omaudit` tells
 you what a plugin can reach before you let it into that process — and tells plugin
